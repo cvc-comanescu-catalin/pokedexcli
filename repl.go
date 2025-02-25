@@ -13,77 +13,114 @@ type config struct {
 	pokeapiClient    pokeapi.Client
 	nextLocationsURL *string
 	prevLocationsURL *string
+	caughtPokemon    map[string]pokeapi.Pokemon
 }
 
 type cliCommand struct {
 	name        string
 	description string
-	callback    func(*config) error
+	callback    func(*config, ...string) error
 }
 
 type Cli struct {
-    commands map[string]cliCommand
+	commands map[string]cliCommand
 }
 
 func NewCli() *Cli {
-    return &Cli{
-        commands: make(map[string]cliCommand),
-    }
+	return &Cli{
+		commands: make(map[string]cliCommand),
+	}
 }
 
 // Method to register commands
-func (c *Cli) RegisterCommand(cmd cliCommand) {
-    c.commands[cmd.name] = cmd
+func (c *Cli) RegisterCommand(cmdName string, cmd cliCommand) {
+	c.commands[cmdName] = cmd
 }
 
 func (c *Cli) RegisterAllCommands() {
-	c.RegisterCommand(cliCommand{
-        name:        "map",
-        description: "Get the next page of locations",
-        callback:    commandMapf,
-    })
-	c.RegisterCommand(cliCommand{
-        name:        "mapb",
-        description: "Get the previous page of locations",
-        callback:    commandMapb,
-    })
-	c.RegisterCommand(cliCommand{
-        name:        "exit",
-        description: "Exit the Pokedex",
-        callback:    commandExit,
-    })
+	c.RegisterCommand(
+		"explore",
+		cliCommand{
+			name:        "explore <location_name>",
+			description: "Explore a location",
+			callback:    commandExplore,
+		})
+	c.RegisterCommand(
+		"catch",
+		cliCommand{
+			name:        "catch <pokemon_name>",
+			description: "Attempt to catch a Pokemon",
+			callback:    commandCatchPokemon,
+		})
+	c.RegisterCommand(
+		"inspect",
+		cliCommand{
+			name:        "inspect <pokemon_name>",
+			description: "View details about a caught Pokemon",
+			callback:    commandInspect,
+		})
+	c.RegisterCommand(
+		"map",
+		cliCommand{
+			name:        "map",
+			description: "Get the next page of locations",
+			callback:    commandMapf,
+		})
+	c.RegisterCommand(
+		"mapb",
+		cliCommand{
+			name:        "mapb",
+			description: "Get the previous page of locations",
+			callback:    commandMapb,
+		})
+	c.RegisterCommand(
+		"pokedex",
+		cliCommand{
+			name:        "pokedex",
+			description: "See all the pokemon you've caught",
+			callback:    commandPokedex,
+		})
+	c.RegisterCommand(
+		"exit",
+		cliCommand{
+			name:        "exit",
+			description: "Exit the Pokedex",
+			callback:    commandExit,
+		})
 	c.CreateHelpCommand()
 }
 
 func (c *Cli) CreateHelpCommand() {
-	c.RegisterCommand(cliCommand{
-        name:        "help",
-        description: "Displays a help message",
-        callback:    func(*config) error {
-			fmt.Print("Welcome to the Pokedex!\n")
-			fmt.Print("Usage:\n\n")
-			for name, command := range c.commands {
-				fmt.Printf("%s: %s\n", name, command.description)
-			}
-			return nil
-		},
-    })
+	c.RegisterCommand(
+		"help",
+		cliCommand{
+			name:        "help",
+			description: "Displays a help message",
+			callback: func(*config, ...string) error {
+				fmt.Print("Welcome to the Pokedex!\n")
+				fmt.Print("Usage:\n\n")
+				for name, command := range c.commands {
+					fmt.Printf("%s: %s\n", name, command.description)
+				}
+				return nil
+			},
+		})
 }
 
-func (c *Cli) ExecuteCommand(name string, cfg *config) {
-    command, ok := c.commands[name]
+func (c *Cli) ExecuteCommand(name string, cfg *config, args ...string) {
+	command, ok := c.commands[name]
 	if !ok {
 		fmt.Println("Unknown command")
 		return
 	}
 
-	err := command.callback(cfg)
+	err := command.callback(cfg, args...)
 	if err != nil {
 		fmt.Println(err)
 	}
 }
 
-func commandExit(*config) error {
+func commandExit(*config, ...string) error {
 	fmt.Println("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return nil
@@ -97,16 +134,21 @@ func startRepl(cfg *config) {
 	for {
 		fmt.Print("Pokedex > ")
 		if scanned := scanner.Scan(); !scanned {
-			break;
+			break
 		}
-		
+
 		enteredWords := cleanInput(scanner.Text())
-		if (len(enteredWords) == 0) {
+		if len(enteredWords) == 0 {
 			continue
 		}
 
 		command := enteredWords[0]
-		cli.ExecuteCommand(command, cfg)
+		commandArgs := []string{}
+		if len(enteredWords) > 1 {
+			commandArgs = enteredWords[1:]
+		}
+
+		cli.ExecuteCommand(command, cfg, commandArgs...)
 	}
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "reading standard input:", err)
